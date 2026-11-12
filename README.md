@@ -71,6 +71,17 @@ curl -sfL https://goyaki.clastix.io | sudo JOIN_URL=<join-url> JOIN_TOKEN=<token
 
 the script will setup the machine, install the container runtime `containerd`, among other required tools, install the `kubelet`, `kubeadm`, `kubectl` binaries and join the machine to the control plane node.
 
+### Kubelet Image Credential Provider
+
+To let kubelet pull images with credentials from a [kubelet image credential provider](https://kubernetes.io/docs/tasks/administer-cluster/kubelet-credential-provider/), place the provider binary and its `CredentialProviderConfig` on the machine before running `yaki`:
+
+| Variable                            | Default                                                 |
+|-------------------------------------|---------------------------------------------------------|
+| `IMAGE_CREDENTIAL_PROVIDER_CONFIG`  | `/etc/kubernetes/image-credential-provider-config.yaml` |
+| `IMAGE_CREDENTIAL_PROVIDER_BIN_DIR` | `/usr/local/lib/kubelet/credential-providers`           |
+
+If the config file exists, `yaki` starts kubelet with `--image-credential-provider-config` and `--image-credential-provider-bin-dir`. Otherwise kubelet is started without them.
+
 
 ### Working with the Cluster
 
