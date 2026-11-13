@@ -97,6 +97,19 @@ Environment variables:
   | REBOOT                  | Set to true to reboot the machine after reset.              | false      |
   +-------------------------+-------------------------------------------------------------+------------+
 
+  Kubelet image credential provider (init, join and upgrade):
+
+    IMAGE_CREDENTIAL_PROVIDER_CONFIG
+      Path to the kubelet CredentialProviderConfig file.
+      Default: /etc/kubernetes/image-credential-provider-config.yaml
+    IMAGE_CREDENTIAL_PROVIDER_BIN_DIR
+      Directory holding the credential provider binaries.
+      Default: /usr/local/lib/kubelet/credential-providers
+
+    If the config file exists when kubelet is installed, kubelet is started with
+    --image-credential-provider-config and --image-credential-provider-bin-dir.
+    Otherwise kubelet is started without them.
+
 EOF
 }
 
@@ -136,6 +149,8 @@ setup_env() {
     APPLY=${APPLY:-false}
     REBOOT=${REBOOT:-false}
     DEBUG=${DEBUG:-false}
+    IMAGE_CREDENTIAL_PROVIDER_CONFIG=${IMAGE_CREDENTIAL_PROVIDER_CONFIG:-/etc/kubernetes/image-credential-provider-config.yaml}
+    IMAGE_CREDENTIAL_PROVIDER_BIN_DIR=${IMAGE_CREDENTIAL_PROVIDER_BIN_DIR:-/usr/local/lib/kubelet/credential-providers}
 }
 
 # Check if prerequisites are installed
@@ -253,7 +268,24 @@ install_kubelet() {
   mkdir -p /usr/lib/systemd/system/kubelet.service.d
   wget -qO- --progress=bar "https://raw.githubusercontent.com/kubernetes/release/${RELEASE_VERSION}/cmd/krel/templates/latest/kubeadm/10-kubeadm.conf" | sed "s:/usr/bin:${BIN_DIR}:g" | tee /usr/lib/systemd/system/kubelet.service.d/10-kubeadm.conf
 
+  configure_image_credential_provider /usr/lib/systemd/system/kubelet.service.d/10-kubeadm.conf
+
   systemctl daemon-reload && systemctl enable --now kubelet && systemctl restart kubelet
+}
+
+# Pass the image credential provider flags to kubelet if a provider config is present
+configure_image_credential_provider() {
+  local dropin=$1
+  [ -f "${IMAGE_CREDENTIAL_PROVIDER_CONFIG}" ] || return 0
+
+  info "configuring kubelet image credential provider from ${IMAGE_CREDENTIAL_PROVIDER_CONFIG}"
+  [ -d "${IMAGE_CREDENTIAL_PROVIDER_BIN_DIR}" ] || warn "${IMAGE_CREDENTIAL_PROVIDER_BIN_DIR} does not exist"
+  local args="--image-credential-provider-config=${IMAGE_CREDENTIAL_PROVIDER_CONFIG} --image-credential-provider-bin-dir=${IMAGE_CREDENTIAL_PROVIDER_BIN_DIR}"
+  sed -i \
+    -e "/^ExecStart=.\+/i Environment=\"KUBELET_IMAGE_CREDENTIAL_PROVIDER_ARGS=${args}\"" \
+    -e "/^ExecStart=.\+/s/\$/ \$KUBELET_IMAGE_CREDENTIAL_PROVIDER_ARGS/" \
+    "${dropin}"
+  grep -q 'KUBELET_IMAGE_CREDENTIAL_PROVIDER_ARGS$' "${dropin}" || fatal "could not add the image credential provider flags to ${dropin}"
 }
 
 install_kubectl() {
